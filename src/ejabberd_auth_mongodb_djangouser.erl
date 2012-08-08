@@ -58,12 +58,11 @@ stop(Host) ->
 %%%
 
 plain_password_required() -> 
-    ?INFO_MSG("django_mongodb_djangouser: fuck~n", []),
     true.
 
 check_password(User, _Server, Password) ->
-    ?INFO_MSG("check_password: [args]: ~p, ~p, ~p ~n", [User, _Server, Password]),
-    mongo_check_password(User, Password).
+    Password_parsed = lists:nth(2, string:tokens(Password, "#")),
+    mongo_check_password(User, Password_parsed).
 
 check_password(User, Server, Password, _Digest, _DigestGen) ->
     ?INFO_MSG("User: ~p, Server: ~p, Password: ~p, Digest: ~p, DigestGen: ~p~n", [User, Server, Password, _Digest, _DigestGen]),
@@ -86,19 +85,15 @@ get_vh_registered_users(_) ->
     [].
 
 get_password(User, Server) ->
-    ?INFO_MSG("django_mongodb_djangouser: fuck ~p, ~p ~n", [User, Server]),
     get_password_s(User, Server).
 
 get_password_s(User, Server) ->
-    ?INFO_MSG("django_mongodb_djangouser: fuck ~p, ~p ~n", [User, Server]),
     "ABCGULU".
 
 remove_user(_,_) ->
-    ?INFO_MSG("django_mongodb_djangouser: fuck~n", []),
     {error, not_allowed}.
 
 remove_user(_,_,_) ->
-    ?INFO_MSG("django_mongodb_djangouser: fuck~n", []),
     {error, not_allowed}.
 
 login(User, Server) ->
@@ -116,6 +111,8 @@ compare_encoded_and_plain_password(Encoded_P, Plain_P) ->
     Encoded_P_from_plain = string:to_lower(sha1:hexstring(P_salt ++ Plain_P)),
     Encoded_P_from_plain == P_encoded.
 
+generate_xmpp_internal_key(
+
     
 %%% TODO: mongo_user_exists()
 
@@ -130,6 +127,7 @@ mongo_user_exists(User) ->
 
 
 mongo_check_password(User, Password) -> 
+    %%% Notice: Password appeared here is refered to xmpp_internal_key in user_profile module.
     ?INFO_MSG("mongo_check_password: [User]~p [Password]~p ~n", [User, Password]),
     Conn = mongoapi:new(xmpp_mongo, <<"gulu">>),
     {ok, Data_authuser_list} = Conn:find(<<"auth_user">>, [{<<"username">>, User}], undefined, 0, 1),
