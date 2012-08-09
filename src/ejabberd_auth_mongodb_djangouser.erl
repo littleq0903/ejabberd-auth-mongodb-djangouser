@@ -20,6 +20,7 @@
 
 % functions used by ejabberd_auth
 -export([login/2,
+         store_type/0,
          set_password/3,
          check_password/3,
          check_password/5,
@@ -60,7 +61,11 @@ stop(Host) ->
 plain_password_required() -> 
     true.
 
+store_type() ->
+    external.
+
 check_password(User, _Server, Password) ->
+    ?INFO_MSG("User: ~p, Server: ~p, Password: ~p", [User, _Server, Password]),
     Password_parsed = lists:nth(2, string:tokens(Password, "#")),
     mongo_check_password(User, Password_parsed).
 
@@ -111,7 +116,6 @@ compare_encoded_and_plain_password(Encoded_P, Plain_P) ->
     Encoded_P_from_plain = string:to_lower(sha1:hexstring(P_salt ++ Plain_P)),
     Encoded_P_from_plain == P_encoded.
 
-generate_xmpp_internal_key(
 
     
 %%% TODO: mongo_user_exists()
@@ -136,4 +140,5 @@ mongo_check_password(User, Password) ->
     {ok, Data_userprofile_list} = Conn:find(<<"user_profiles_userprofile">>, [{<<"user_id">>, Data_authuser_oid}], undefined, 0, 1),
     Data_userprofile = lists:nth(1, Data_userprofile_list),
     Data_userprofile_password = proplists:get_value(<<"xmpp_internal_key">>, Data_userprofile),
-    Data_userprofile_password == Password.
+    ?INFO_MSG("~p == ~p~n", [Data_userprofile_password, Password]),
+    Data_userprofile_password == list_to_binary(Password).
