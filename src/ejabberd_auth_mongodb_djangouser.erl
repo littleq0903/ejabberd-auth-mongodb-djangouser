@@ -16,7 +16,8 @@
          stop/1,
          compare_encoded_and_plain_password/2,
          mongo_user_exists/1,
-         mongo_check_password/2]).
+         mongo_check_password/3,
+         mongo_check_password/4]).
 
 % functions used by ejabberd_auth
 -export([login/2,
@@ -44,7 +45,8 @@
 
 start(Host) ->
     ?INFO_MSG("Module: ~p starting...", [?MODULE]),
-    mongodb:replicaSets(xmpp_mongo, ["localhost:27017"]),
+    MongoServers = ejabberd_config:get_local_option({mongodb_djangouser_server, Host}),
+    mongodb:replicaSets(xmpp_mongo, MongoServers),
     mongodb:connect(xmpp_mongo),
     ok.
 
@@ -65,16 +67,12 @@ store_type() ->
     external.
 
 check_password(User, _Server, Password) ->
-    ?INFO_MSG("User: ~p, Server: ~p, Password: ~p", [User, _Server, Password]),
-    Password_parsed = lists:nth(2, string:tokens(Password, "#")),
-    mongo_check_password(User, Password_parsed).
+    mongo_check_password(User, Password, _Server).
 
 check_password(User, Server, Password, _Digest, _DigestGen) ->
-    ?INFO_MSG("User: ~p, Server: ~p, Password: ~p, Digest: ~p, DigestGen: ~p~n", [User, Server, Password, _Digest, _DigestGen]),
     check_password(User, Server, Password).
 
 is_user_exists(User, _Server) ->
-    ?INFO_MSG("is_user_exists: [args]: ~p, ~p ~n", [User, _Server]),
     mongo_user_exists(User).
 
 set_password(_User, _Server, _Password) ->
@@ -93,7 +91,7 @@ get_password(User, Server) ->
     get_password_s(User, Server).
 
 get_password_s(User, Server) ->
-    "ABCGULU".
+    "".
 
 remove_user(_,_) ->
     {error, not_allowed}.
@@ -102,7 +100,6 @@ remove_user(_,_,_) ->
     {error, not_allowed}.
 
 login(User, Server) ->
-    ?INFO_MSG("django_mongodb_djangouser: fuck~n", []),
     true.
 
 %%%
@@ -110,6 +107,7 @@ login(User, Server) ->
 %%%
 
 compare_encoded_and_plain_password(Encoded_P, Plain_P) ->
+    %?INFO_MSG("Encoded_P: ~p~nPlain_P: ~p~n", [Encoded_P, Plain_P]),
     Encoded_P_Tokens = string:tokens(Encoded_P, "$"),
     P_salt = lists:nth(2, Encoded_P_Tokens),
     P_encoded = lists:nth(3, Encoded_P_Tokens),
@@ -121,7 +119,7 @@ compare_encoded_and_plain_password(Encoded_P, Plain_P) ->
 %%% TODO: mongo_user_exists()
 
 mongo_user_exists(User) ->
-    ?INFO_MSG("mongo_user_exists ~n", []),
+    %?INFO_MSG("mongo_user_exists ~n", []),
     Conn = mongoapi:new(xmpp_mongo, <<"gulu">>),
     {ok, Data} = Conn:find(<<"auth_user">>, [{<<"username">>, User}], undefined, 0, 1),
     case length(Data) of
@@ -130,15 +128,30 @@ mongo_user_exists(User) ->
     end.
 
 
-mongo_check_password(User, Password) -> 
+mongo_check_password(User, Password, Server) ->
+    DB_dbname = list_to_binary(ejabberd_config:get_local_option({mongodb_djangouser_db, Server})),
+    DBConnection = mongoapi:new(xmpp_mongo, DB_dbname),
+    Password_parsed_list = string:tokens(Password, "#"),
+    case length(Password_parsed_list) of
+        1 -> mongo_check_password(User, Password, plain, DBConnection);
+        2 -> mongo_check_password(User, Password, internal_key, DBConnection)
+    end.
+
+mongo_check_password(User, Password, internal_key, DBConnection) -> 
+    Password_parsed = lists:nth(2, string:tokens(Password, "#")),
     %%% Notice: Password appeared here is refered to xmpp_internal_key in user_profile module.
-    ?INFO_MSG("mongo_check_password: [User]~p [Password]~p ~n", [User, Password]),
-    Conn = mongoapi:new(xmpp_mongo, <<"gulu">>),
-    {ok, Data_authuser_list} = Conn:find(<<"auth_user">>, [{<<"username">>, User}], undefined, 0, 1),
+    {ok, Data_authuser_list} = DBConnection:find(<<"auth_user">>, [{<<"username">>, User}], undefined, 0, 1),
     Data_authuser = lists:nth(1, Data_authuser_list),
     Data_authuser_oid = proplists:get_value(<<"_id">>, Data_authuser),
-    {ok, Data_userprofile_list} = Conn:find(<<"user_profiles_userprofile">>, [{<<"user_id">>, Data_authuser_oid}], undefined, 0, 1),
+    {ok, Data_userprofile_list} = DBConnection:find(<<"user_profiles_userprofile">>, [{<<"user_id">>, Data_authuser_oid}], undefined, 0, 1),
     Data_userprofile = lists:nth(1, Data_userprofile_list),
     Data_userprofile_password = proplists:get_value(<<"xmpp_internal_key">>, Data_userprofile),
-    ?INFO_MSG("~p == ~p~n", [Data_userprofile_password, Password]),
-    Data_userprofile_password == list_to_binary(Password).
+    %?INFO_MSG("~p == ~p~n", [Data_userprofile_password, Password_parsed]),
+    Data_userprofile_password == list_to_binary(Password_parsed);
+
+mongo_check_password(User, Password, plain, DBConnection) ->
+    {ok, Data_authuser_list} = DBConnection:find(<<"auth_user">>, [{<<"username">>, User}], undefined, 0, 1),
+    Data_authuser = lists:nth(1, Data_authuser_list),
+    Data_authuser_password = proplists:get_value(<<"password">>, Data_authuser),
+    compare_encoded_and_plain_password(Data_authuser_password, Password).
+
