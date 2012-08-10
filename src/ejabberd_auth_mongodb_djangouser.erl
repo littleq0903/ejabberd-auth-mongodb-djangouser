@@ -108,7 +108,7 @@ login(User, Server) ->
 
 compare_encoded_and_plain_password(Encoded_P, Plain_P) ->
     %?INFO_MSG("Encoded_P: ~p~nPlain_P: ~p~n", [Encoded_P, Plain_P]),
-    Encoded_P_Tokens = string:tokens(Encoded_P, "$"),
+    Encoded_P_Tokens = string:tokens(binary_to_list(Encoded_P), "$"),
     P_salt = lists:nth(2, Encoded_P_Tokens),
     P_encoded = lists:nth(3, Encoded_P_Tokens),
     Encoded_P_from_plain = string:to_lower(sha1:hexstring(P_salt ++ Plain_P)),
